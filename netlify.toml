@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Forward /c/:code directly to the serverless redirect function
+[[redirects]]
+  from = "/c/:code"
+  to = "/.netlify/functions/redirect?code=:code"
+  status = 200
+
+# SPA fallback for all React client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

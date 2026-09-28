@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' && getUserData().status == 'approved'
+      );
+    }
+    
+    function isApprovedUser() {
+      return isAuthenticated() && (
+        getUserData().status == 'approved'
+      );
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      // Authenticated users can read their own profile; Admins can read all profiles
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      
+      // On signup, user creates pending user doc
+      allow create: if isAuthenticated() 
+        && request.auth.uid == userId
+        && request.resource.data.role in ['user', 'admin']
+        && (request.resource.data.status == 'pending' || !exists(/databases/$(database)/documents/users/$(userId)));
+      
+      // Only admins can approve/revoke or change roles
+      allow update: if isAdmin() || (
+        isAuthenticated() 
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // CARDS COLLECTION
+    match /cards/{code} {
+      // Approved users and admins can read cards (to look up inventory or assign)
+      allow read: if isApprovedUser();
+      
+      // Create new blank card:
+      // Must be an approved user or admin.
+      // Card must NOT already exist (prevents overwriting/duplicating existing codes).
+      // Must start with status: 'unassigned'
+      allow create: if isApprovedUser()
+        && !exists(/databases/$(database)/documents/cards/$(code))
+        && request.resource.data.status == 'unassigned'
+        && request.resource.data.createdBy == request.auth.uid;
+      
+      // Update rules:
+      // 1. ADMINS can update any card at any time (assigned or unassigned).
+      // 2. REGULAR APPROVED USERS can ONLY update a card from 'unassigned' -> 'assigned' (initial assignment).
+      //    Once active/assigned, regular users CANNOT update or reassign it!
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          isApprovedUser()
+          && resource.data.status == 'unassigned'
+          && request.resource.data.status == 'assigned'
+          && request.resource.data.assignedBy == request.auth.uid
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+        )
+      );
+      
+      // Delete rules:
+      // 1. Admins can delete any card (blank or assigned).
+      // 2. Regular approved users can ONLY delete blank (unassigned) cards that they created.
+      allow delete: if isAuthenticated() && (
+        isAdmin() || (
+          isApprovedUser()
+          && resource.data.status == 'unassigned'
+          && resource.data.createdBy == request.auth.uid
+        )
+      );
+    }
+  }
+}
