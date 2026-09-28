@@ -10,9 +10,11 @@ import {
   ArrowRight,
   Clock,
   Layers,
+  FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { generateCard } from '../firebase/cardService';
+import { generateCard, generateBatchCards } from '../firebase/cardService';
 import { getCardRedirectUrl } from '../utils/codeGenerator';
 
 export function GenerateCode({ onNavigateToAssign }) {
@@ -22,9 +24,11 @@ export function GenerateCode({ onNavigateToAssign }) {
   const [loading, setLoading] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedAllCodes, setCopiedAllCodes] = useState(false);
   const [recentBatch, setRecentBatch] = useState([]);
-  const [batchCount, setBatchCount] = useState(1);
+  const [batchCount, setBatchCount] = useState(5);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [lastBatchResult, setLastBatchResult] = useState(null);
 
   // Render QR when currentCard changes
   useEffect(() => {
@@ -46,7 +50,7 @@ export function GenerateCode({ onNavigateToAssign }) {
       .catch((err) => console.error('QR rendering error:', err));
   }, [currentCard]);
 
-  // One-tap generation
+  // One-tap single code generation
   const handleGenerateOne = async () => {
     setLoading(true);
     setCopiedLink(false);
@@ -64,19 +68,22 @@ export function GenerateCode({ onNavigateToAssign }) {
     }
   };
 
-  // Optional Bulk Generation for manufacturing runs
+  // High-performance bulk batch generation
   const handleGenerateBatch = async () => {
     if (batchCount < 1) return;
     setBatchLoading(true);
+    setLastBatchResult(null);
 
     try {
-      const generated = [];
-      for (let i = 0; i < batchCount; i++) {
-        const card = await generateCard({ user, profile });
-        generated.push(card);
-      }
-      setCurrentCard(generated[0]);
-      setRecentBatch((prev) => [...generated, ...prev]);
+      const generatedList = await generateBatchCards({
+        count: batchCount,
+        user,
+        profile,
+      });
+
+      setLastBatchResult(generatedList);
+      setCurrentCard(generatedList[0]);
+      setRecentBatch((prev) => [...generatedList, ...prev]);
     } catch (err) {
       console.error('Batch generation error:', err);
       alert('Error during batch generation: ' + err.message);
@@ -106,60 +113,107 @@ export function GenerateCode({ onNavigateToAssign }) {
     } catch {}
   };
 
+  const handleCopyAllBatchCodes = async () => {
+    if (!lastBatchResult || lastBatchResult.length === 0) return;
+    const text = lastBatchResult.map((c) => c.code).join(', ');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAllCodes(true);
+      setTimeout(() => setCopiedAllCodes(false), 2500);
+    } catch {
+      prompt('Copy all codes:', text);
+    }
+  };
+
+  // Export batch as CSV for industrial print shop or spreadsheet
+  const handleExportCSV = () => {
+    if (!lastBatchResult || lastBatchResult.length === 0) return;
+
+    let csvContent = 'data:text/csv;charset=utf-8,';
+    csvContent += 'Card_Code,Redirect_URL,Status,Created_At\n';
+
+    lastBatchResult.forEach((c) => {
+      const url = getCardRedirectUrl(c.code);
+      csvContent += `${c.code},${url},${c.status},${c.createdAt}\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `B1_Cards_Batch_${lastBatchResult.length}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Download high-resolution PNG for a card
   const handleDownloadPNG = (cardToDownload = currentCard) => {
-    if (!cardToDownload || !qrDataUrl) return;
+    if (!cardToDownload) return;
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
+    const url = getCardRedirectUrl(cardToDownload.code);
+    QRCode.toDataURL(url, {
+      width: 512,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+      errorCorrectionLevel: 'H',
+    }).then((dataUri) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
 
-    img.onload = () => {
-      const qrSize = 512;
-      const padding = 40;
-      const textHeight = 70;
+      img.onload = () => {
+        const qrSize = 512;
+        const padding = 40;
+        const textHeight = 70;
 
-      canvas.width = qrSize + padding * 2;
-      canvas.height = qrSize + padding * 2 + textHeight;
+        canvas.width = qrSize + padding * 2;
+        canvas.height = qrSize + padding * 2 + textHeight;
 
-      // Clean white background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, padding, padding, qrSize, qrSize);
 
-      // Draw QR
-      ctx.drawImage(img, padding, padding, qrSize, qrSize);
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`B1 • ${cardToDownload.code}`, canvas.width / 2, qrSize + padding + 40);
 
-      // Label & Card Code
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`B1 • ${cardToDownload.code}`, canvas.width / 2, qrSize + padding + 40);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText('Scan to connect', canvas.width / 2, qrSize + padding + 68);
 
-      // Subtitle
-      ctx.fillStyle = '#64748b';
-      ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText('Scan to connect', canvas.width / 2, qrSize + padding + 68);
+        const downloadLink = document.createElement('a');
+        downloadLink.download = `B1-Card-${cardToDownload.code}.png`;
+        downloadLink.href = canvas.toDataURL('image/png');
+        downloadLink.click();
+      };
 
-      const downloadLink = document.createElement('a');
-      downloadLink.download = `B1-Card-${cardToDownload.code}.png`;
-      downloadLink.href = canvas.toDataURL('image/png');
-      downloadLink.click();
-    };
+      img.src = dataUri;
+    });
+  };
 
-    img.src = qrDataUrl;
+  // Download all PNGs in batch sequentially
+  const handleDownloadAllPNGs = async () => {
+    if (!lastBatchResult || lastBatchResult.length === 0) return;
+    for (let i = 0; i < lastBatchResult.length; i++) {
+      handleDownloadPNG(lastBatchResult[i]);
+      // Small pause between file downloads so the browser doesn't block them
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
   };
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+    <div style={{ maxWidth: 680, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>
-          Generate Blank QR Code
+          Generate Blank QR Codes
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
           Generate unique 6-character codes for printing physical cards or encoding NFC tags before selling.
         </p>
       </div>
 
-      {/* Main One-Tap Action */}
+      {/* Main One-Tap Single Action */}
       <div className="card-panel" style={{ textAlign: 'center', marginBottom: 24 }}>
         {!currentCard ? (
           <div style={{ padding: '24px 8px' }}>
@@ -326,7 +380,7 @@ export function GenerateCode({ onNavigateToAssign }) {
         )}
       </div>
 
-      {/* Batch Generation Utility Box */}
+      {/* Bulk Batch Generation Card */}
       <div className="card-panel" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
@@ -334,7 +388,7 @@ export function GenerateCode({ onNavigateToAssign }) {
               <Layers size={18} color="#818cf8" /> Bulk Batch Generation
             </h3>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
-              Generate multiple blank codes in bulk for production print sheets.
+              Generate multiple unique blank codes in one atomic batch for manufacturing sheets.
             </p>
           </div>
 
@@ -348,21 +402,108 @@ export function GenerateCode({ onNavigateToAssign }) {
               <option value={5}>5 Cards</option>
               <option value={10}>10 Cards</option>
               <option value={20}>20 Cards</option>
+              <option value={50}>50 Cards</option>
             </select>
 
             <button
-              className="btn btn-secondary"
+              className="btn btn-primary"
               onClick={handleGenerateBatch}
               disabled={batchLoading}
             >
-              {batchLoading ? 'Generating...' : `Generate Batch`}
+              <Layers size={16} />
+              {batchLoading ? `Generating ${batchCount}...` : `Generate ${batchCount} Cards`}
             </button>
           </div>
         </div>
+
+        {/* Batch Success Result Box */}
+        {lastBatchResult && lastBatchResult.length > 0 && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: 16,
+              background: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: 14,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={18} color="#34d399" />
+                <strong style={{ color: '#34d399', fontSize: 15 }}>
+                  Batch of {lastBatchResult.length} Blank Cards Ready!
+                </strong>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleCopyAllBatchCodes}
+                  title="Copy all codes as comma-separated text"
+                >
+                  {copiedAllCodes ? <Check size={14} color="#34d399" /> : <Copy size={14} />}
+                  {copiedAllCodes ? 'Codes Copied!' : 'Copy All Codes'}
+                </button>
+
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleExportCSV}
+                  title="Export codes to CSV for Excel/Print Shop"
+                >
+                  <FileSpreadsheet size={14} color="#60a5fa" />
+                  Export CSV
+                </button>
+
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleDownloadAllPNGs}
+                  title="Download individual PNG images"
+                >
+                  <Download size={14} />
+                  Download PNGs
+                </button>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Click any code below to preview its QR code and details above:
+            </p>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))',
+                gap: 8,
+              }}
+            >
+              {lastBatchResult.map((c) => (
+                <button
+                  key={c.code}
+                  onClick={() => setCurrentCard(c)}
+                  style={{
+                    background: currentCard?.code === c.code ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                    border: `1px solid ${currentCard?.code === c.code ? '#38bdf8' : 'var(--border-subtle)'}`,
+                    color: currentCard?.code === c.code ? '#38bdf8' : '#f8fafc',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {c.code}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Session History */}
-      {recentBatch.length > 0 && (
+      {recentBatch.length > 0 && !lastBatchResult && (
         <div className="card-panel">
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
             Recently Generated In This Session ({recentBatch.length})

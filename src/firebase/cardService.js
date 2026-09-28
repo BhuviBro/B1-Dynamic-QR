@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   onSnapshot,
   query,
   orderBy,
@@ -89,6 +90,66 @@ export async function generateCard({ user, profile }) {
   saveMockCards(cards);
   window.dispatchEvent(new Event('b1_mock_cards_updated'));
   return mockCard;
+}
+
+/**
+ * Generate a bulk batch of unique blank NFC/QR cards using atomic Firestore batch write
+ */
+export async function generateBatchCards({ count = 5, user, profile }) {
+  const uid = user.uid;
+  const name = profile?.displayName || profile?.email || 'User';
+  const targetCount = Math.min(Math.max(1, count), 100);
+
+  const uniqueCodes = new Set();
+  let attempts = 0;
+  const maxAttempts = targetCount * 30;
+
+  // Ensure all codes are completely unique and not in Firestore
+  while (uniqueCodes.size < targetCount && attempts < maxAttempts) {
+    attempts++;
+    const candidate = generateRandomCode(6);
+    if (uniqueCodes.has(candidate)) continue;
+
+    const alreadyExists = await checkCodeExists(candidate);
+    if (!alreadyExists) {
+      uniqueCodes.add(candidate);
+    }
+  }
+
+  if (uniqueCodes.size < targetCount) {
+    throw new Error(`Could only find ${uniqueCodes.size} unique codes. Please try again with a smaller batch.`);
+  }
+
+  const generatedList = Array.from(uniqueCodes).map((code) => ({
+    code,
+    status: 'unassigned',
+    createdBy: uid,
+    createdByName: name,
+    createdAt: new Date().toISOString(),
+  }));
+
+  if (isConfigured && db) {
+    const batch = writeBatch(db);
+    for (const card of generatedList) {
+      const cardRef = doc(db, 'cards', card.code);
+      batch.set(cardRef, {
+        code: card.code,
+        status: card.status,
+        createdBy: card.createdBy,
+        createdByName: card.createdByName,
+        createdAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    return generatedList;
+  }
+
+  // Mock Mode:
+  const cards = getMockCards();
+  cards.unshift(...generatedList);
+  saveMockCards(cards);
+  window.dispatchEvent(new Event('b1_mock_cards_updated'));
+  return generatedList;
 }
 
 /**
@@ -215,7 +276,6 @@ export async function assignCard(code, formData, { user, profile }) {
 
 /**
  * Real-time subscription to cards list
- * Shows all cards ordered by creation date so all reps can view shared blank inventory to assign
  */
 export function subscribeToCards({ user, profile }, callback) {
   if (isConfigured && db) {
