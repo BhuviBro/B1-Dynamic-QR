@@ -1,13 +1,36 @@
 import React, { useState } from 'react';
 import { LogIn, Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { GoogleIcon } from '../components/GoogleIcon';
 
 export function Login({ onGoToSignup, onOpenConfig }) {
-  const { login, switchMockUser } = useAuth();
+  const { login, loginWithGoogle, switchMockUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (err) {
+      console.error('Google sign in error:', err);
+      let message = err.message;
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'Google sign-in was closed before completing.';
+      } else if (err.code === 'auth/popup-blocked') {
+        message = 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        message = 'Google Sign-in is not yet enabled in Firebase Console. Enable "Google" under Authentication > Sign-in method.';
+      }
+      setError(message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,7 +61,7 @@ export function Login({ onGoToSignup, onOpenConfig }) {
     <div style={{ maxWidth: 440, margin: '40px auto 0', padding: '0 8px' }}>
       <div className="card-panel" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
         {/* Brand Header */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div
             className="brand-icon"
             style={{ width: 56, height: 56, fontSize: 24, margin: '0 auto 14px', borderRadius: 16 }}
@@ -57,6 +80,54 @@ export function Login({ onGoToSignup, onOpenConfig }) {
             <div>{error}</div>
           </div>
         )}
+
+        {/* Continue with Google */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-full btn-lg"
+          onClick={handleGoogleSignIn}
+          disabled={googleLoading || loading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            color: '#ffffff',
+            fontWeight: 600,
+            fontSize: 14,
+            padding: '12px 16px',
+            borderRadius: 12,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <GoogleIcon size={18} />
+          {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
+        </button>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            margin: '20px 0',
+            gap: 12,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: 0.6,
+              fontWeight: 600,
+            }}
+          >
+            or sign in with email
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

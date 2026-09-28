@@ -3,6 +3,7 @@ import {
   subscribeToAuth,
   signInUser,
   signUpUser,
+  signInWithGoogle,
   signOutUser,
   mockQuickSignIn,
 } from '../firebase/authService';
@@ -28,6 +29,10 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     return await signInUser(email, password);
+  };
+
+  const loginWithGoogle = async () => {
+    return await signInWithGoogle();
   };
 
   const signup = async (email, password, displayName) => {
@@ -65,6 +70,7 @@ export function AuthProvider({ children }) {
     isConfigured,
     configSource,
     login,
+    loginWithGoogle,
     signup,
     logout,
     switchMockUser,

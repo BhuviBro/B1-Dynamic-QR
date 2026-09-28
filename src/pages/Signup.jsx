@@ -1,15 +1,38 @@
 import React, { useState } from 'react';
 import { UserPlus, AlertCircle, ArrowLeft, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { GoogleIcon } from '../components/GoogleIcon';
 
 export function Signup({ onGoToLogin }) {
-  const { signup } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleSignUp = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (err) {
+      console.error('Google sign-up error:', err);
+      let message = err.message;
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'Google sign-up was closed before completing.';
+      } else if (err.code === 'auth/popup-blocked') {
+        message = 'Pop-up was blocked by your browser. Please allow pop-ups for this site and try again.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        message = 'Google Sign-in is not yet enabled in Firebase Console. Enable "Google" under Authentication > Sign-in method.';
+      }
+      setError(message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,7 +84,7 @@ export function Signup({ onGoToLogin }) {
           <ArrowLeft size={16} /> Back to Sign In
         </button>
 
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div
             className="brand-icon"
             style={{ width: 52, height: 52, fontSize: 20, margin: '0 auto 12px', borderRadius: 14 }}
@@ -87,6 +110,54 @@ export function Signup({ onGoToLogin }) {
             <div>{error}</div>
           </div>
         )}
+
+        {/* Continue with Google */}
+        <button
+          type="button"
+          className="btn btn-secondary btn-full btn-lg"
+          onClick={handleGoogleSignUp}
+          disabled={googleLoading || loading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            color: '#ffffff',
+            fontWeight: 600,
+            fontSize: 14,
+            padding: '12px 16px',
+            borderRadius: 12,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <GoogleIcon size={18} />
+          {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
+        </button>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            margin: '20px 0',
+            gap: 12,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: 0.6,
+              fontWeight: 600,
+            }}
+          >
+            or register with email
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

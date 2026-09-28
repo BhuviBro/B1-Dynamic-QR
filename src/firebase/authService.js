@@ -1,6 +1,8 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -184,6 +186,52 @@ export async function signInUser(email, password) {
   localStorage.setItem(CURRENT_MOCK_USER_KEY, JSON.stringify(existing));
   window.dispatchEvent(new Event('storage'));
   return { user: existing, profile: existing };
+}
+
+// Sign in with Google
+export async function signInWithGoogle() {
+  if (isConfigured && auth && db) {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await signInWithPopup(auth, provider);
+    const user = cred.user;
+
+    const userDocRef = doc(db, 'users', user.uid);
+    const snap = await getDoc(userDocRef);
+
+    let profile = null;
+    if (snap.exists()) {
+      profile = snap.data();
+    } else {
+      // First-time Google user -> Create profile with pending status
+      profile = {
+        email: (user.email || '').toLowerCase(),
+        displayName: user.displayName || user.email?.split('@')[0] || 'User',
+        photoURL: user.photoURL || '',
+        role: 'user',
+        status: 'pending',
+        requestedAt: serverTimestamp(),
+      };
+      await setDoc(userDocRef, profile);
+    }
+    return { user, profile };
+  }
+
+  // Mock Mode:
+  const mockGoogleUser = {
+    uid: 'mock_google_' + Date.now(),
+    email: 'google.user@b1cards.com',
+    displayName: 'Google Demo User',
+    role: 'user',
+    status: 'pending',
+    requestedAt: new Date().toISOString(),
+  };
+  const users = getMockUsers();
+  users.push(mockGoogleUser);
+  saveMockUsers(users);
+  localStorage.setItem(CURRENT_MOCK_USER_KEY, JSON.stringify(mockGoogleUser));
+  window.dispatchEvent(new Event('storage'));
+  return { user: mockGoogleUser, profile: mockGoogleUser };
 }
 
 // Mock sign in shortcut (for rapid testing during demo/review)
