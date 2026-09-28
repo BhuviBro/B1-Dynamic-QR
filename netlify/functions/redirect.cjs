@@ -64,8 +64,14 @@ async function getServiceAccountToken(clientEmail, privateKey) {
  * Parse Service Account from Netlify Environment Variables
  */
 function extractServiceAccount() {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    let raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+  const saRaw =
+    process.env.FIREBASE_SERVICE_ACCOUNT ||
+    process.env.FIREBASE_KEY ||
+    process.env.FIREBASE_SERVICE_KEY ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+  if (saRaw) {
+    let raw = saRaw.trim();
 
     // Decode if base64 encoded
     if (!raw.startsWith('{') && !raw.startsWith('"')) {
@@ -88,15 +94,15 @@ function extractServiceAccount() {
         };
       }
     } catch (e) {
-      console.warn('FIREBASE_SERVICE_ACCOUNT JSON parse warning:', e.message);
+      console.warn('FIREBASE_SERVICE_ACCOUNT / FIREBASE_KEY JSON parse warning:', e.message);
     }
   }
 
-  if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+  if (process.env.FIREBASE_CLIENT_EMAIL && (process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_KEY)) {
     return {
       projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_KEY,
     };
   }
 
