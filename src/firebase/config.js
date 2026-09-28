@@ -4,7 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 
 // Check if credentials are supplied via Vite environment variables or localStorage
 function getRawConfig() {
-  const customConfigStr = localStorage.getItem('b1_firebase_custom_config');
+  let customConfigStr = null;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      customConfigStr = window.localStorage.getItem('b1_firebase_custom_config');
+    } catch {}
+  }
   if (customConfigStr) {
     try {
       const parsed = JSON.parse(customConfigStr);

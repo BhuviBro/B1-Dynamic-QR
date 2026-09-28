@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
+import JSZip from 'jszip';
 import {
   Sparkles,
   Download,
@@ -12,6 +13,7 @@ import {
   Layers,
   FileSpreadsheet,
   CheckCircle2,
+  Archive,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { generateCard, generateBatchCards } from '../firebase/cardService';
@@ -29,6 +31,7 @@ export function GenerateCode({ onNavigateToAssign }) {
   const [batchCount, setBatchCount] = useState(5);
   const [batchLoading, setBatchLoading] = useState(false);
   const [lastBatchResult, setLastBatchResult] = useState(null);
+  const [zippingProgress, setZippingProgress] = useState('');
 
   // Render QR when currentCard changes
   useEffect(() => {
@@ -146,59 +149,97 @@ export function GenerateCode({ onNavigateToAssign }) {
     document.body.removeChild(link);
   };
 
-  // Download high-resolution PNG for a card
-  const handleDownloadPNG = (cardToDownload = currentCard) => {
-    if (!cardToDownload) return;
+  // Helper to render high-res composite PNG data for a card
+  const generateCardPNGData = (card) => {
+    return new Promise((resolve, reject) => {
+      const url = getCardRedirectUrl(card.code);
+      QRCode.toDataURL(url, {
+        width: 512,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'H',
+      })
+        .then((dataUri) => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const img = new Image();
 
-    const url = getCardRedirectUrl(cardToDownload.code);
-    QRCode.toDataURL(url, {
-      width: 512,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
-      errorCorrectionLevel: 'H',
-    }).then((dataUri) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
+          img.onload = () => {
+            const qrSize = 512;
+            const padding = 40;
+            const textHeight = 70;
 
-      img.onload = () => {
-        const qrSize = 512;
-        const padding = 40;
-        const textHeight = 70;
+            canvas.width = qrSize + padding * 2;
+            canvas.height = qrSize + padding * 2 + textHeight;
 
-        canvas.width = qrSize + padding * 2;
-        canvas.height = qrSize + padding * 2 + textHeight;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, padding, padding, qrSize, qrSize);
 
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, padding, padding, qrSize, qrSize);
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`B1 • ${card.code}`, canvas.width / 2, qrSize + padding + 40);
 
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`B1 • ${cardToDownload.code}`, canvas.width / 2, qrSize + padding + 40);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText('Scan to connect', canvas.width / 2, qrSize + padding + 68);
 
-        ctx.fillStyle = '#64748b';
-        ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillText('Scan to connect', canvas.width / 2, qrSize + padding + 68);
-
-        const downloadLink = document.createElement('a');
-        downloadLink.download = `B1-Card-${cardToDownload.code}.png`;
-        downloadLink.href = canvas.toDataURL('image/png');
-        downloadLink.click();
-      };
-
-      img.src = dataUri;
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.onerror = reject;
+          img.src = dataUri;
+        })
+        .catch(reject);
     });
   };
 
-  // Download all PNGs in batch sequentially
-  const handleDownloadAllPNGs = async () => {
-    if (!lastBatchResult || lastBatchResult.length === 0) return;
-    for (let i = 0; i < lastBatchResult.length; i++) {
-      handleDownloadPNG(lastBatchResult[i]);
-      // Small pause between file downloads so the browser doesn't block them
-      await new Promise((resolve) => setTimeout(resolve, 350));
+  // Download high-resolution PNG for a single card
+  const handleDownloadPNG = async (cardToDownload = currentCard) => {
+    if (!cardToDownload) return;
+    try {
+      const pngData = await generateCardPNGData(cardToDownload);
+      const downloadLink = document.createElement('a');
+      downloadLink.download = `B1-Card-${cardToDownload.code}.png`;
+      downloadLink.href = pngData;
+      downloadLink.click();
+    } catch (err) {
+      console.error('PNG download error:', err);
+    }
+  };
+
+  // Download cards together in a single ZIP archive!
+  const handleDownloadCardsAsZip = async (cardsList, zipNamePrefix = 'B1_Batch') => {
+    if (!cardsList || cardsList.length === 0) return;
+    setZippingProgress(`Preparing 0/${cardsList.length}...`);
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(`${zipNamePrefix}_${cardsList.length}_Cards`);
+
+      for (let i = 0; i < cardsList.length; i++) {
+        setZippingProgress(`Bundling ${i + 1}/${cardsList.length}...`);
+        const card = cardsList[i];
+        const pngDataUrl = await generateCardPNGData(card);
+        const base64Data = pngDataUrl.split(',')[1];
+        folder.file(`B1-Card-${card.code}.png`, base64Data, { base64: true });
+      }
+
+      setZippingProgress('Compressing ZIP...');
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${zipNamePrefix}_${cardsList.length}_Cards_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('ZIP generation error:', err);
+      alert('Error creating ZIP archive: ' + err.message);
+    } finally {
+      setZippingProgress('');
     }
   };
 
@@ -455,12 +496,14 @@ export function GenerateCode({ onNavigateToAssign }) {
                 </button>
 
                 <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleDownloadAllPNGs}
-                  title="Download individual PNG images"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleDownloadCardsAsZip(lastBatchResult, `B1_Batch_${lastBatchResult.length}`)}
+                  disabled={Boolean(zippingProgress)}
+                  title="Download all QR PNGs together in a single ZIP file"
+                  style={{ background: 'linear-gradient(135deg, #059669, #10b981)', fontWeight: 600 }}
                 >
-                  <Download size={14} />
-                  Download PNGs
+                  <Archive size={14} />
+                  {zippingProgress || 'Download All PNGs (ZIP)'}
                 </button>
               </div>
             </div>
@@ -505,9 +548,22 @@ export function GenerateCode({ onNavigateToAssign }) {
       {/* Session History */}
       {recentBatch.length > 0 && !lastBatchResult && (
         <div className="card-panel">
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-            Recently Generated In This Session ({recentBatch.length})
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>
+              Recently Generated In This Session ({recentBatch.length})
+            </h3>
+            {recentBatch.length > 1 && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleDownloadCardsAsZip(recentBatch, `B1_Session_${recentBatch.length}`)}
+                disabled={Boolean(zippingProgress)}
+                title="Download all session QR codes as a single ZIP file"
+              >
+                <Archive size={14} />
+                {zippingProgress || `Download All ${recentBatch.length} PNGs (ZIP)`}
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {recentBatch.map((c) => (
               <button

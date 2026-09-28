@@ -47,8 +47,8 @@ service cloud.firestore {
 
     // CARDS COLLECTION
     match /cards/{code} {
-      // Approved users and admins can read cards (to look up inventory or assign)
-      allow read: if isApprovedUser();
+      // Public read for card lookup and instant dynamic redirection
+      allow read: if true;
       
       // Create new blank card:
       // Must be an approved user or admin.
