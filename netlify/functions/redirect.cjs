@@ -11,6 +11,7 @@ const admin = require('firebase-admin');
 
 // Cache Firestore instance across function invocations
 let db = null;
+let lastInitError = null;
 
 function initFirebase() {
   if (db) return db;
@@ -21,27 +22,58 @@ function initFirebase() {
       return db;
     }
 
-    let credential;
+    let credential = null;
+
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      credential = admin.credential.cert(sa);
+      let rawSa = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+
+      // Check if value is base64 encoded
+      if (!rawSa.startsWith('{') && !rawSa.startsWith('"')) {
+        try {
+          const decoded = Buffer.from(rawSa, 'base64').toString('utf-8');
+          if (decoded.trim().startsWith('{')) {
+            rawSa = decoded.trim();
+          }
+        } catch {}
+      }
+
+      let sa = null;
+      try {
+        sa = JSON.parse(rawSa);
+        // Handle double-stringified JSON if Netlify or copy-paste added extra outer quotes
+        if (typeof sa === 'string') {
+          sa = JSON.parse(sa);
+        }
+      } catch (parseErr) {
+        lastInitError = `JSON parse failed for FIREBASE_SERVICE_ACCOUNT: ${parseErr.message}`;
+        console.error(lastInitError);
+      }
+
+      if (sa) {
+        // Fix standard Google Service Account literal \n in private_key
+        if (sa.private_key) {
+          sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+        }
+        credential = admin.credential.cert(sa);
+      }
     } else if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
       credential = admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       });
-    } else if (process.env.FIREBASE_PROJECT_ID) {
-      // Default application credentials / environment
-      credential = admin.credential.applicationDefault();
     }
 
     if (credential) {
       admin.initializeApp({ credential });
       db = admin.firestore();
+      return db;
+    } else if (!lastInitError) {
+      lastInitError = 'FIREBASE_SERVICE_ACCOUNT environment variable is not set in Netlify.';
     }
   } catch (err) {
-    console.error('Firebase Admin initialization error:', err.message);
+    lastInitError = `Firebase Admin initialization error: ${err.message}`;
+    console.error(lastInitError);
   }
 
   return db;
@@ -205,68 +237,8 @@ exports.handler = async (event) => {
 
   const firestore = initFirebase();
 
-  // If Firebase Admin is not configured in this environment, try REST fallback if projectId exists
+  // If Firebase Admin is not configured, show clear diagnostic message
   if (!firestore) {
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
-    const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
-
-    if (projectId) {
-      try {
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/cards/${code}${apiKey ? `?key=${apiKey}` : ''}`;
-        const resp = await fetch(url);
-
-        if (resp.status === 404) {
-          return {
-            statusCode: 404,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-            body: renderBrandedPage({
-              title: 'B1 Cards — Card Not Found',
-              statusText: 'Card Not Found',
-              statusType: 'error',
-              heading: 'Card Not Found',
-              message: "We couldn't find a record for this card code. Please check the QR code or link.",
-              code,
-            }),
-          };
-        }
-
-        if (resp.ok) {
-          const doc = await resp.json();
-          const fields = doc.fields || {};
-          const status = fields.status?.stringValue;
-          const destinationUrl = fields.url?.stringValue;
-
-          if (status === 'assigned' && destinationUrl) {
-            return {
-              statusCode: 302,
-              headers: {
-                Location: destinationUrl,
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-              },
-              body: '',
-            };
-          }
-
-          // Unassigned card
-          return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-            body: renderBrandedPage({
-              title: "B1 Cards — Card Not Active",
-              statusText: 'Inactive Card',
-              statusType: 'inactive',
-              heading: "This card isn't active yet",
-              message: 'Please contact the person who gave you this card to activate it.',
-              code,
-            }),
-          };
-        }
-      } catch (restErr) {
-        console.error('REST Firestore lookup error:', restErr.message);
-      }
-    }
-
-    // Graceful response if backend connection isn't configured yet
     return {
       statusCode: 503,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -275,7 +247,7 @@ exports.handler = async (event) => {
         statusText: 'Service Notice',
         statusType: 'inactive',
         heading: 'Firebase Service Pending',
-        message: 'The redirect service is awaiting production Firebase credentials in Netlify environment variables.',
+        message: 'The redirect function is awaiting your Firebase Service Account key in Netlify. Please check Netlify Environment Variables.',
         code,
       }),
     };
