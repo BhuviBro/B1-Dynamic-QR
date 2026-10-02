@@ -15,7 +15,34 @@
     <title>B1 Cards — Smart NFC & QR Business Cards</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #131d35 0%, #080c14 75%, #04060a 100%); color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; overflow: hidden; padding: 20px;">
+        <div style="position: relative; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+          <div style="position: absolute; inset: -20px; border-radius: 50%; border: 1.5px solid rgba(56, 189, 248, 0.4); animation: b1Pulse 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;"></div>
+          <div style="position: absolute; inset: -8px; border-radius: 50%; border: 1.5px solid rgba(124, 58, 237, 0.45); animation: b1Pulse 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite 0.7s;"></div>
+          <div style="width: 80px; height: 80px; border-radius: 24px; background: linear-gradient(135deg, #2563eb, #7c3aed); display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 0 35px rgba(37, 99, 235, 0.5); border: 2px solid rgba(255, 255, 255, 0.25);">
+            <span style="font-size: 32px; font-weight: 800; color: #fff; line-height: 1;">B1</span>
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255, 255, 255, 0.8); margin-top: 3px;">CARDS</span>
+          </div>
+        </div>
+        <div style="font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 8px;">Connecting...</div>
+        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 20px;">Smart NFC &amp; QR dynamic redirection</div>
+        <div style="width: 200px; height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 9999px; overflow: hidden; position: relative;">
+          <div style="position: absolute; top: 0; bottom: 0; width: 50%; background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, transparent); border-radius: 9999px; animation: b1Shimmer 1.6s ease-in-out infinite;"></div>
+        </div>
+        <style>
+          @keyframes b1Pulse {
+            0% { transform: scale(0.8); opacity: 0.9; }
+            50% { transform: scale(1.35); opacity: 0.35; }
+            100% { transform: scale(1.95); opacity: 0; }
+          }
+          @keyframes b1Shimmer {
+            0% { left: -50%; }
+            100% { left: 100%; }
+          }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

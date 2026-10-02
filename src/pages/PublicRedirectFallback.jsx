@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { getCard } from '../firebase/cardService';
+import { RedirectLoadingScreen } from '../components/RedirectLoadingScreen';
 
 export function PublicRedirectFallback({ code }) {
   const [loading, setLoading] = useState(true);
   const [card, setCard] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [redirectTarget, setRedirectTarget] = useState('');
 
   useEffect(() => {
     async function checkCard() {
@@ -18,6 +20,7 @@ export function PublicRedirectFallback({ code }) {
         const found = await getCard(code);
         if (!found) {
           setNotFound(true);
+          setLoading(false);
         } else {
           setCard(found);
 
@@ -27,14 +30,18 @@ export function PublicRedirectFallback({ code }) {
             if (!/^https?:\/\//i.test(target)) {
               target = 'https://' + target;
             }
-            window.location.replace(target);
+            setRedirectTarget(target);
+            // Slight micro-pause (250ms) to allow the glowing radar animation to start gracefully
+            setTimeout(() => {
+              window.location.replace(target);
+            }, 250);
             return;
           }
+          setLoading(false);
         }
       } catch (err) {
         console.error('Redirect check error:', err);
         setNotFound(true);
-      } finally {
         setLoading(false);
       }
     }
@@ -42,16 +49,13 @@ export function PublicRedirectFallback({ code }) {
     checkCard();
   }, [code]);
 
-  if (loading) {
+  if (loading || redirectTarget) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0e17', color: '#f8fafc' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div className="brand-icon" style={{ width: 56, height: 56, margin: '0 auto 16px', fontSize: 22 }}>
-            B1
-          </div>
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>Connecting to card destination...</p>
-        </div>
-      </div>
+      <RedirectLoadingScreen
+        code={code}
+        businessName={card?.businessName}
+        targetUrl={redirectTarget}
+      />
     );
   }
 

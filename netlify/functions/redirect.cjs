@@ -221,6 +221,129 @@ function renderBrandedPage({ title, statusText, statusType, heading, message, co
 </html>`;
 }
 
+// Inline Mobile-First Animated Redirection Loading Page
+function renderRedirectLoadingPage({ targetUrl, businessName, code }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="refresh" content="0; url=${targetUrl}">
+  <title>B1 Cards — Connecting...</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 35%, #131d35 0%, #080c14 75%, #04060a 100%);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      text-align: center;
+      overflow: hidden;
+    }
+    .radar-box {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .radar-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1.5px solid rgba(56, 189, 248, 0.4);
+      animation: radarPulse 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+    }
+    .radar-ring.outer { inset: -20px; }
+    .radar-ring.middle { inset: -8px; border-color: rgba(124, 58, 237, 0.45); animation-delay: 0.7s; }
+    .logo-badge {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 35px rgba(37, 99, 235, 0.5), 0 10px 25px rgba(0, 0, 0, 0.6);
+      border: 2px solid rgba(255, 255, 255, 0.25);
+    }
+    .logo-badge .b1 { font-size: 32px; font-weight: 800; color: #fff; line-height: 1; }
+    .logo-badge .sub { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,0.8); margin-top: 3px; }
+    h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 8px; line-height: 1.3; }
+    p { font-size: 14px; color: #94a3b8; margin-bottom: 20px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin-bottom: 24px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 1.5px;
+    }
+    .pill .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399;
+    }
+    .bar-track {
+      width: 100%; max-width: 240px; height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 9999px; overflow: hidden; position: relative; margin-bottom: 20px;
+    }
+    .bar-thumb {
+      position: absolute; top: 0; bottom: 0; width: 50%; background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, transparent); border-radius: 9999px; animation: shimmerBar 1.6s ease-in-out infinite;
+    }
+    .manual-link {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-size: 13px; font-weight: 600; text-decoration: none; margin-top: 10px;
+    }
+    .footer { margin-top: 32px; font-size: 11px; color: #64748b; letter-spacing: 0.5px; }
+    @keyframes radarPulse {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      50% { transform: scale(1.35); opacity: 0.35; }
+      100% { transform: scale(1.95); opacity: 0; }
+    }
+    @keyframes shimmerBar {
+      0% { left: -50%; }
+      100% { left: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="radar-box">
+    <div class="radar-ring outer"></div>
+    <div class="radar-ring middle"></div>
+    <div class="logo-badge">
+      <span class="b1">B1</span>
+      <span class="sub">CARDS</span>
+    </div>
+  </div>
+  <h1>${businessName ? 'Connecting to ' + businessName + '...' : 'Connecting to Destination...'}</h1>
+  <p>Smart NFC &amp; QR dynamic redirection</p>
+  ${code ? '<div class="pill"><span class="dot"></span>' + code.toUpperCase() + '</div>' : ''}
+  <div class="bar-track">
+    <div class="bar-thumb"></div>
+  </div>
+  <a class="manual-link" href="${targetUrl}">Tap here if not redirected &rarr;</a>
+  <div class="footer">B1 Cards &bull; Contactless Smart Platform</div>
+  <script>
+    setTimeout(function() {
+      window.location.replace(${JSON.stringify(targetUrl)});
+    }, 150);
+  </script>
+</body>
+</html>`;
+}
+
 exports.handler = async (event) => {
   // Extract 6-character card code from query string or URL path
   let code = (event.queryStringParameters && event.queryStringParameters.code) || '';
@@ -322,7 +445,7 @@ exports.handler = async (event) => {
     }
   }
 
-  // 1. If assigned and URL exists -> HTTP 302 instant redirect!
+  // 1. If assigned and URL exists -> HTTP 302 instant redirect with animated radar screen!
   if (card && card.status === 'assigned' && card.url) {
     let targetUrl = card.url.trim();
     if (!/^https?:\/\//i.test(targetUrl)) {
@@ -333,8 +456,13 @@ exports.handler = async (event) => {
       headers: {
         Location: targetUrl,
         'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Content-Type': 'text/html; charset=utf-8',
       },
-      body: '',
+      body: renderRedirectLoadingPage({
+        targetUrl,
+        businessName: card.businessName,
+        code,
+      }),
     };
   }
 
