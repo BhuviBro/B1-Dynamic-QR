@@ -81,11 +81,11 @@ export function AssignCode({ initialCode, onClearInitialCode }) {
     }
   }, [initialCode, handleLookup, onClearInitialCode]);
 
-  const handleScanSuccess = (scannedCode) => {
+  const handleScanSuccess = useCallback((scannedCode) => {
     setIsScannerOpen(false);
     setInputCode(scannedCode);
     handleLookup(scannedCode);
-  };
+  }, [handleLookup]);
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();

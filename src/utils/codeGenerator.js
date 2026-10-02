@@ -26,13 +26,30 @@ export function extractCodeFromInput(input) {
   if (!input || typeof input !== 'string') return '';
   const trimmed = input.trim();
 
-  // If input is a URL like https://domain.com/c/K3F9X1 or /c/K3F9X1
+  // 1. Direct 6-character code
+  if (/^[a-zA-Z0-9]{6}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+
+  // 2. Standard B1 URL path: /c/XXXXXX
   const urlMatch = trimmed.match(/\/c\/([a-zA-Z0-9]{6})(?:[/?#]|$)/i);
   if (urlMatch && urlMatch[1]) {
     return urlMatch[1].toUpperCase();
   }
 
-  // If input is directly the 6-char code
+  // 3. Query param format: ?code=XXXXXX or &code=XXXXXX
+  const queryMatch = trimmed.match(/[?&]code=([a-zA-Z0-9]{6})(?:[&/#]|$)/i);
+  if (queryMatch && queryMatch[1]) {
+    return queryMatch[1].toUpperCase();
+  }
+
+  // 4. Code separated by delimiters like "B1 • MH98Y7" or "B1-MH98Y7"
+  const delimitedMatch = trimmed.match(/(?:^|[\s:·•\/\-_])([a-zA-Z0-9]{6})(?:$|[\s:·•\/\-_])/);
+  if (delimitedMatch && delimitedMatch[1]) {
+    return delimitedMatch[1].toUpperCase();
+  }
+
+  // 5. Fallback 6-char substring
   const codeMatch = trimmed.match(/([a-zA-Z0-9]{6})/);
   if (codeMatch && codeMatch[1]) {
     return codeMatch[1].toUpperCase();

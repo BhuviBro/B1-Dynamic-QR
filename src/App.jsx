@@ -11,6 +11,7 @@ import { AssignCode } from './pages/AssignCode';
 import { AdminPanel } from './pages/AdminPanel';
 import { PublicRedirectFallback } from './pages/PublicRedirectFallback';
 import { FirebaseConfigModal } from './components/FirebaseConfigModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
   const { user, loading, isAdmin, isPending, isRevoked } = useAuth();
@@ -147,8 +148,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

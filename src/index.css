@@ -681,3 +681,12 @@ body {
   border: 1px solid rgba(59, 130, 246, 0.25);
   color: #bfdbfe;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
