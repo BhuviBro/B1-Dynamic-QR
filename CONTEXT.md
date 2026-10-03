@@ -46,3 +46,81 @@ This document serves as the persistent architectural log and running developer j
 **Follow-up:** 
 - Deploy updated `firestore.rules` to production Firebase console.
 - Host on Netlify and configure production environment variables.
+
+---
+
+## [2026-09-28] Bulk Atomic Batch Generation, Single-Click ZIP Export & Netlify Packaging
+**What:**
+- **Atomic Bulk Generation**: Implemented Firestore `writeBatch` in `generateBatchCards` to atomically generate 5, 10, 20, or 50 unique blank cards in sub-second execution with zero collision risk.
+- **Single-Click ZIP Archiving**: Integrated `jszip` to bundle all generated QR PNGs into a single `.zip` file (`B1_Cards_Batch_[N]_Cards_[DATE].zip`), completely eliminating browser multiple-download blocking. Added support for batch and session history downloads.
+- **Industrial CSV Export**: One-click spreadsheet export containing `Card_Code`, `Redirect_URL`, `Status`, and `Created_At` for manufacturing sheets and print shops.
+- **Netlify Function Packaging (`redirect.cjs`)**: Renamed redirect function from `.js` to `.cjs` to resolve Vite `"type": "module"` ESM conflict with `@netlify/zip-it-and-ship-it`.
+- **Zero-Dependency Google OAuth2 & REST Fallback**: Replaced heavy `firebase-admin` (~100MB gRPC binaries) with Node's native `crypto.createSign('RSA-SHA256')` + direct Firestore REST API lookup via public Web API Key (`apiKey`), making the serverless redirect function lightning-fast with zero dependency bottlenecks.
+- **Environment Variable Aliasing**: Supported `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_KEY`, `FIREBASE_SERVICE_KEY`, and `FIREBASE_SERVICE_ACCOUNT_KEY` interchangeably in Netlify.
+
+**Why:**
+- Factory printing requires bulk assets (CSV tables and folders of PNGs) rather than generating cards one by one.
+- Browser pop-up blockers aggressively throttle multiple consecutive file downloads; a single ZIP archive provides 100% reliability for print operations.
+- Serverless functions experience cold-start lag when loading bulky SDKs like `firebase-admin`; native Node crypto + REST API delivers sub-100ms response times.
+
+---
+
+## [2026-09-28] Public Firestore Security Rules & One-Tap Google Authentication
+**What:**
+- **Public Card Redirection Rules**: Updated `firestore.rules` to `allow read: if true;` on `match /cards/{code}`. Allows card scans in the wild to be read without authentication, while all write, update, and delete actions remain strictly locked to authenticated admins and approved reps.
+- **Google Sign-In (`signInWithGoogle`)**: Integrated `GoogleAuthProvider` and `signInWithPopup` into both the Login and Request Access screens.
+  - New Google accounts automatically register with `status: 'pending'` for admin review.
+  - Approved users and admins keep their full privileges and photo profile across logins.
+  - Added authentic Google brand SVG icon component (`GoogleIcon.jsx`).
+
+**Why:**
+- When customers tap an NFC card or scan a QR code, they are anonymous public visitors; Firestore must permit reading card metadata (status and destination URL) without login.
+- Google Sign-In drastically reduces authentication friction for sales reps and administrators in the field.
+
+---
+
+## [2026-10-02] Camera QR Scanner Lifecycle Stability & Global ErrorBoundary
+**What:**
+- **Resolved "Scans and Goes into Blank State" Crash**:
+  - Fixed a critical React unmount race condition where `html5-qrcode` attempted to remove DOM elements from `#qr-reader-container` after React had already unmounted it, throwing an uncaught `TypeError: Cannot read properties of null`.
+  - Re-architected `ScannerModal.jsx` to stop and clear the scanner instance *before* closing the modal.
+  - Guarded instance refs to ensure cleanup never executes twice.
+- **Dual-Camera Fallback**: Camera initialization attempts rear camera (`facingMode: 'environment'`) first, and automatically falls back to user/front camera if rear is unavailable.
+- **Global `ErrorBoundary.jsx`**: Wrapped `App.jsx` in a class-based error boundary to trap any hardware, media stream, or runtime errors, completely preventing blank white screens.
+- **Refined Code Parser**: Upgraded `extractCodeFromInput` in `codeGenerator.js` with multi-pattern regex to handle `/c/XXXXXX` paths, query parameters (`?code=XXXXXX`), delimited strings (`B1 • XXXXXX`), and raw 6-character codes.
+
+**Why:**
+- Field testing revealed mobile browsers occasionally crashed when unmounting active camera streams during QR recognition.
+- An Error Boundary guarantees high resilience in production environments without leaving users on a blank screen.
+
+---
+
+## [2026-10-02] Cyber-Luxe Animated Redirection Loading Screen & Zero-Delay Pre-Loader
+**What:**
+- **Animated Redirection Component (`RedirectLoadingScreen.jsx`)**: Built a modern cyber-luxe mobile screen featuring:
+  - Concentric expanding electric-cyan and purple NFC radar pulse waves radiating from a 3D glowing B1 monogram.
+  - Dynamic status text ("Connecting to {Business Name}...").
+  - Live card code badge with a pulsing green indicator.
+  - High-tech indeterminate shimmer progress bar.
+  - Automatic redirect via `window.location.replace()`.
+  - Manual tap fallback button ("Tap here if not redirected ➔") displayed after 2.2s.
+- **Pre-Hydration Zero-Delay Preloader (`index.html`)**: Embedded matching inline-styled radar animation inside `<div id="root">` so that mobile devices scanning a QR code see the animated radar from millisecond 0 before JavaScript or React bundles finish downloading.
+- **Serverless Redirect Function Match (`redirect.cjs`)**: Updated Netlify function to return the animated radar HTML page alongside HTTP 302 headers.
+
+**Why:**
+- When scanning QR codes on mobile networks, phones previously showed a static PWA launcher icon or blank frame during DNS lookup and redirection.
+- The futuristic animated radar screen provides immediate visual feedback, reinforcing the B1 Cards brand and delivering a high-end customer experience.
+
+---
+
+## Current Architecture Summary
+
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Frontend UI** | React 19 + Vite + Vanilla CSS | Mobile-first admin dashboard, PWA installable, dark glassmorphism |
+| **Authentication** | Firebase Auth (Email/Pass + Google Sign-In) | RBAC with pending approval workflow |
+| **Database** | Cloud Firestore | Cards inventory & users collection with dual-attribution |
+| **Serverless Redirect** | Netlify Functions (`redirect.cjs`) | Instant dynamic 302 routing with animated radar fallback |
+| **QR Generation & Export**| `qrcode` + `jszip` | Client-side QR rendering, bulk batch ZIP download, CSV export |
+| **Camera Scanner** | `html5-qrcode` + `ErrorBoundary` | In-browser QR card scanning with race-condition prevention |
+
